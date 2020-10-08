@@ -278,21 +278,6 @@ public class RUtils extends RObject {
         }
     }
     public void initAvailableIntegrations() {
-        List<String> Towny = new ArrayList<String>();
-        Towny.add("Towny");
-        Towny.add("0.91");
-        Towny.add("TownyIntegration");
-        plugin.availableIntergrations.add(Towny);
-        List<String> FactionsOne = new ArrayList<String>();
-        FactionsOne.add("Factions");
-        FactionsOne.add("1.8");
-        FactionsOne.add("FactionsOneIntegration");
-        plugin.availableIntergrations.add(FactionsOne);
-        List<String> FactionsUUID = new ArrayList<String>();
-        FactionsUUID.add("Factions");
-        FactionsUUID.add("1.6");
-        FactionsUUID.add("FactionsUUIDIntegration");
-        plugin.availableIntergrations.add(FactionsUUID);
         List<String> GriefPrevention = new ArrayList<String>();
         GriefPrevention.add("GriefPrevention");
         GriefPrevention.add("16");
@@ -300,24 +285,9 @@ public class RUtils extends RObject {
         plugin.availableIntergrations.add(GriefPrevention);
         List<String> WorldGuard = new ArrayList<String>();
         WorldGuard.add("WorldGuard");
-        WorldGuard.add("6");
+        WorldGuard.add("7");
         WorldGuard.add("WorldGuardIntegration");
         plugin.availableIntergrations.add(WorldGuard);
-        List<String> RedProtect = new ArrayList<String>();
-        RedProtect.add("RedProtect");
-        RedProtect.add("7");
-        RedProtect.add("RedProtectIntegration");
-        plugin.availableIntergrations.add(RedProtect);
-        List<String> Factions = new ArrayList<String>();
-        Factions.add("Factions");
-        Factions.add("2.8");
-        Factions.add("FactionsIntegration");
-        plugin.availableIntergrations.add(Factions);
-        List<String> Landlord = new ArrayList<String>();
-        Landlord.add("Landlord");
-        Landlord.add("1.3");
-        Landlord.add("LandlordIntegration");
-        plugin.availableIntergrations.add(Landlord);
     }
     
     public boolean isLagOK() {

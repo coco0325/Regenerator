@@ -5,13 +5,11 @@
  */
 package com.draksterau.Regenerator.tasks;
 
-import org.bukkit.scheduler.BukkitRunnable;
-
 /**
  *
  * @author draks
  */
-public class lagTask extends BukkitRunnable {
+public class lagTask implements Runnable {
 
     public static int tickCount = 0;
     public static long[] TICKS= new long[600];

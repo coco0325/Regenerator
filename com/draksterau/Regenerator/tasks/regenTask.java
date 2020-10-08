@@ -13,13 +13,12 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.bukkit.Bukkit;
-import org.bukkit.scheduler.BukkitRunnable;
 
 /**
  *
  * @author draks
  */
-public class regenTask extends BukkitRunnable {
+public class regenTask implements Runnable {
     
     RegeneratorPlugin plugin;
 

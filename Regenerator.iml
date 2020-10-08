@@ -17,5 +17,8 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="Spigot-1.14.4" level="project" />
+    <orderEntry type="library" name="GriefPrevention" level="project" />
+    <orderEntry type="library" name="worldguard-bukkit-7.0.1-rc2-dist" level="project" />
+    <orderEntry type="library" name="worldedit-bukkit-7.0.1-rc1-dist" level="project" />
   </component>
 </module>
