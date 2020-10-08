@@ -5,6 +5,7 @@
  */
 package com.draksterau.Regenerator.commands;
 
+import com.draksterau.Regenerator.Handlers.MsgType;
 import com.draksterau.Regenerator.Handlers.RChunk;
 import com.draksterau.Regenerator.event.RegenerationRequestEvent;
 import com.draksterau.Regenerator.event.RequestTrigger;
@@ -39,7 +40,12 @@ public class regenCommand {
                 Bukkit.getServer().getPluginManager().callEvent(requestEvent);
                 if (!requestEvent.isCancelled()) {
                     if (command.plugin.utils.canManuallyRegen(command.plugin.utils.getSenderPlayer(command.sender), rootChunk)) {
-                        Bukkit.getServer().getScheduler().runTask(command.plugin, new ChunkTask(rChunk, true));
+                        try {
+                            new ChunkTask(rChunk, true).runTask(command.plugin);
+                        } catch (Exception e) {
+                            command.plugin.utils.throwMessage(MsgType.SEVERE, "Failed to regenerate chunk : " + rChunk.getChunk().getX() + "," + rChunk.getChunk().getZ() + " on world: " + rChunk.getWorldName());
+                            if (command.plugin.config.debugMode) e.printStackTrace();
+                        }
                         rChunk.resetActivity();
                         Integration integration = command.plugin.utils.getIntegrationForChunk(player.getLocation().getChunk());
                         if (integration != null && integration.isChunkClaimed(rootChunk)) {                    

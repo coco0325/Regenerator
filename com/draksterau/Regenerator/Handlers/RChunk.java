@@ -27,7 +27,8 @@ public final class RChunk extends RObject {
     public String worldName;
     
     // Last activity time (in ms).
-    public long lastActivity = 0;
+    // Default is -1, because a chunk with its activity reset will be 0. We need to be able to target chunks without their value modified to support regen on initial chunk load.
+    public long lastActivity = -1;
     
     private File chunkConfigFile;
     private FileConfiguration chunkConfig;
@@ -69,10 +70,13 @@ public final class RChunk extends RObject {
     }
     
     public void updateActivity() {
+        Long oldLastActivity = this.lastActivity;
         this.lastActivity = System.currentTimeMillis();
+        this.plugin.utils.throwMessage(MsgType.DEBUG, "Updating activity for chunk : " + this.chunkX + "," + this.chunkZ + " on world: " + worldName + " from : " + oldLastActivity + " to : " + lastActivity + ".");
         this.saveData();
     }
     public void resetActivity() {
+        this.plugin.utils.throwMessage(MsgType.DEBUG, "Resetting activity for chunk : " + this.chunkX + "," + this.chunkZ + " on world: " + worldName + ", previous value : " + lastActivity);
         this.lastActivity = 0;
         this.saveData();
     }
@@ -89,7 +93,9 @@ public final class RChunk extends RObject {
             chunkConfig = YamlConfiguration.loadConfiguration(new InputStreamReader(plugin.getResource("chunk.yml")));
             saveData();
         }
-        this.lastActivity = chunkConfig.getLong("chunks." + chunkX + "," + chunkZ);
+        if (chunkConfig.isSet("chunks." + chunkX + "," + chunkZ)) {
+            this.lastActivity = chunkConfig.getLong("chunks." + chunkX + "," + chunkZ);
+        }
     }
 
     @Override
@@ -99,7 +105,7 @@ public final class RChunk extends RObject {
         try {
             chunkConfig.save(chunkConfigFile);
         } catch (IOException ex) {
-            plugin.utils.throwMessage("severe","Could not save chunk data to " + chunkConfigFile + " (Exception: " + ex.getMessage() + ")");
+            plugin.utils.throwMessage(MsgType.SEVERE,String.format(plugin.lang.getForKey("messages.chunkDataSaveFail"), chunkConfigFile.getAbsolutePath(), ex.getMessage()));
         }
     }
 

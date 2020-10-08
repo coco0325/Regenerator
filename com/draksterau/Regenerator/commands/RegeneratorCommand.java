@@ -5,6 +5,7 @@
  */
 package com.draksterau.Regenerator.commands;
 
+import com.draksterau.Regenerator.Handlers.MsgType;
 import com.draksterau.Regenerator.RegeneratorPlugin;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;

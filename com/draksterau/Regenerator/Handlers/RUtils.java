@@ -8,9 +8,11 @@ package com.draksterau.Regenerator.Handlers;
 import com.draksterau.Regenerator.RegeneratorPlugin;
 import com.draksterau.Regenerator.integration.Integration;
 import com.draksterau.Regenerator.tasks.lagTask;
+import com.mojang.authlib.GameProfile;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Level;
+import java.util.HashMap;
+import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Chunk;
@@ -19,8 +21,17 @@ import org.bukkit.World;
 import org.bukkit.block.BlockState;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
+import net.minecraft.server.v1_15_R1.MinecraftServer;
+import net.minecraft.server.v1_15_R1.WorldServer;
+import net.minecraft.server.v1_15_R1.EntityPlayer;
+import org.bukkit.craftbukkit.v1_15_R1.CraftServer;
+import net.minecraft.server.v1_15_R1.PlayerInteractManager;
+import org.bukkit.craftbukkit.v1_15_R1.CraftWorld;
+import org.bukkit.craftbukkit.v1_15_R1.entity.CraftPlayer;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.block.BlockBreakEvent;
+
 
 /**
  *
@@ -28,6 +39,8 @@ import org.bukkit.entity.Player;
  */
 public class RUtils extends RObject {
 
+    public static HashMap<Location, Boolean> breakAndResult = new HashMap<Location, Boolean>();
+    
     public RUtils(RegeneratorPlugin plugin) {
         super(plugin);
     }
@@ -58,23 +71,83 @@ public class RUtils extends RObject {
         return null;
     }
     
+    public boolean uuidInUse(UUID id) {
+        return Bukkit.getPlayer(id) != null || Bukkit.getOfflinePlayer(id) != null;
+    }
+    
+    public Player getFakePlayer(){
+        if (plugin.fakePlayer == null) {
+            MinecraftServer server = ((CraftServer) Bukkit.getServer()).getServer();
+            WorldServer world = ((CraftWorld) Bukkit.getWorlds().get(0)).getHandle();
+            EntityPlayer npc = new EntityPlayer(server, world, new GameProfile(plugin.config.fakePlayerUUID, "Regenerator"), new PlayerInteractManager(world));
+            CraftPlayer player = new CraftPlayer((CraftServer)Bukkit.getServer(), npc);
+            plugin.fakePlayer = player;
+        }
+        return plugin.fakePlayer;
+    }
+    
+    public boolean canBreakChunk(Chunk c) {
+            int X = c.getX() * 16;
+            int Z = c.getZ() * 16;
+            int Y = c.getWorld().getHighestBlockAt(X,Z).getY() +1;
+            if (!canBreakAt(new Location(c.getWorld(), X,Y,Z))) return false;
+//            
+//            for (int x = 0; x < 16; x++) {
+//                for (int z = 0; z < 16; z++) {
+//                    for (int y = 0; y < 256; y++) {
+//                        if (!canBreakAt(new Location(c.getWorld(),X+x,y,Z+z))) return false;
+//                    }
+//                }
+//            }
+            return true;
+    }
+    
+    public boolean canBreakAt(Location loc) {
+        BlockBreakEvent event = new BlockBreakEvent(loc.getBlock(),getFakePlayer());
+        breakAndResult.put(loc, true);
+        Bukkit.getServer().getPluginManager().callEvent(event);
+        boolean result = breakAndResult.get(loc);
+        breakAndResult.remove(loc);
+        return result;
+    }
     // Returns a formatted string of Enabled or disabled
     
     public String getStatusForBoolean(boolean bool) {
         if (bool) return ChatColor.GREEN + "Enabled" + ChatColor.GRAY;
         return ChatColor.RED + "Disabled" + ChatColor.GRAY;
     }
-    
-    
+
+    public boolean regenerateChunk(Chunk chunk) {
+        int bx = chunk.getX() << 4;
+        int bz = chunk.getZ() << 4;
+        try {
+            com.sk89q.worldedit.math.BlockVector3 pt1 =  com.sk89q.worldedit.math.BlockVector3.at(bx, 0, bz);
+            com.sk89q.worldedit.math.BlockVector3 pt2 = com.sk89q.worldedit.math.BlockVector3.at(bx + 15, 256, bz + 15);
+            com.sk89q.worldedit.bukkit.BukkitWorld world = new com.sk89q.worldedit.bukkit.BukkitWorld(chunk.getWorld());
+            com.sk89q.worldedit.regions.CuboidRegion region = new com.sk89q.worldedit.regions.CuboidRegion(world, pt1, pt2);   
+            com.sk89q.worldedit.EditSession session = com.sk89q.worldedit.WorldEdit.getInstance().getEditSessionFactory().getEditSession(world, 65536);
+            boolean result = world.regenerate(region, session);
+            session.flushSession();
+            return result;
+        } catch (Exception e) {
+            plugin.utils.throwMessage(MsgType.SEVERE, String.format(plugin.lang.getForKey("messages.regenFailedWorldEdit"), bx, bz, chunk.getWorld().getName(), e.getMessage()));
+            if (plugin.config.debugMode) e.printStackTrace();
+            return false;
+        }
+    }
     // This verifies a chunk is inactive and unclaimed.
     public boolean autoRegenRequirementsMet(Chunk chunk) {
         
         RWorld RWorld = getRWorldForWorld(chunk.getWorld());
         
         // If the world is not loaded, do nothing.
-        if (RWorld == null) return false;
+        if (RWorld == null) {
+            plugin.utils.throwMessage(MsgType.DEBUG, "Not allowing autoregen of chunk: " + chunk.getX() + "," + chunk.getZ() + " on world: " + chunk.getWorld().getName() + " as the world is not correctly initialised. Report this  to Devs!");
+            return false;
+        }
         // Blocked at the world level.
         if (!RWorld.canAutoRegen()) {
+            plugin.utils.throwMessage(MsgType.DEBUG, "Not allowing autoregen of chunk: " + chunk.getX() + "," + chunk.getZ() + " on world: " + chunk.getWorld().getName() + " as the world has autoregen disabled.");
             return false;
         }
                 
@@ -84,10 +157,14 @@ public class RUtils extends RObject {
         // Blocked at the integration level.
         for (Integration integration : plugin.loadedIntegrations) {
             if (!integration.shouldChunkAutoRegen(chunk)) {
+                plugin.utils.throwMessage(MsgType.DEBUG, "Not allowing autoregen of chunk: " + chunk.getX() + "," + chunk.getZ() + " on world: " + chunk.getWorld().getName() + " as " + integration.getPluginName() + " is preventing it.");
                 return false;
             }
         }
-
+        if (plugin.config.enableUnknownProtectionDetection && !plugin.utils.canBreakChunk(chunk)) {
+            plugin.utils.throwMessage(MsgType.DEBUG, "Not allowing autoregen of chunk: " + chunk.getX() + "," + chunk.getZ() + " on world: " + chunk.getWorld().getName() + " as an unknown plugin is preventing it.");
+            return false;
+        }
         // Not blocked.
         return true;
     }
@@ -95,28 +172,100 @@ public class RUtils extends RObject {
     public void iterateIntegrations() {
         for (List<String> integration : plugin.availableIntergrations) {
             String name = integration.get(2).replace("Integration", "");
-            throwMessage("info", ChatColor.LIGHT_PURPLE + name);
+            throwMessage(MsgType.INFO, ChatColor.LIGHT_PURPLE + name);
         }
     }
+    
+    public ArrayList<RChunk> getRChunksNear(Location loc, int radiusChunks) {
+        ArrayList<RChunk> chunks = new ArrayList<RChunk>();
+        int blockRadius = radiusChunks * 16;
+        for (int x = (int) ((loc.getX() - blockRadius)); x <= loc.getX() + blockRadius;x += 16) {
+            for (int z = (int)(loc.getZ() - blockRadius);z <= loc.getZ() + blockRadius;z += 16) {
+                Location location = new Location(loc.getWorld(),x,0,z);
+                RChunk RChunk = new RChunk(plugin, location.getChunk().getX(), location.getChunk().getZ(), location.getWorld().getName());
+                chunks.add(RChunk);
+            }
+        }
+        return chunks;
+    }
+    
+    public String getEnglishTimeFromMs(Long ms) {
+        if (ms < 1000) return "Now";
+        if (ms == null) return "Never";
+        Long seconds = ms / 1000;
+        int days = 0;
+        int hours = 0;
+        int minutes = 0;
+        while (seconds >= 86400) {
+            days += 1;
+            seconds -= 86400;
+        }
+        while (seconds >= 3600) {
+            hours += 1;
+            seconds -= 3600;
+        }
+        while (seconds >= 60) {
+            minutes += 1;
+            seconds -= 60;
+        }
+        String returnValue = "";
+        if (days > 0) {
+            returnValue += (days + " days, ");
+        }
+        if (hours > 0) {
+            returnValue += (hours + " hrs, ");            
+        }
+        if (minutes > 0) {
+            returnValue += (minutes + " mins, ");            
+        }
+        returnValue += (seconds + " seconds");
+        return returnValue;
+    }
+    public void printErrorReport(String error) {
+        throwMessage(MsgType.INFO, ChatColor.RED + "A Severe error has been encountered (" + error + "). Please consider submitting this on github at https://github.com/Bysokar/Regenerator/Issues" + ChatColor.RESET);
+        throwMessage(MsgType.INFO, "Please be sure to include the following:");
+        throwMessage(MsgType.INFO, "Bukkit Server Version: " + Bukkit.getVersion() + ", implementing Bukkit API version: " + Bukkit.getBukkitVersion());
+        throwMessage(MsgType.INFO, "Regenerator version: v" + this.plugin.getDescription().getVersion());
+        //TODO: Check WorldEdit version and add here.
+        if (Bukkit.getPluginManager().isPluginEnabled("WorldEdit")) {
+            throwMessage(MsgType.INFO, "WorldEdit version: v" +  Bukkit.getPluginManager().getPlugin("WorldEdit").getDescription().getVersion());
+        } else {
+            throwMessage(MsgType.INFO, "WorldEdit version: None (You must install WorldEdit for Regenerator to work, please dont report this!)");
+        }
+        for (Integration i : plugin.loadedIntegrations) {
+            throwMessage(MsgType.INFO, "Integration " + ChatColor.GREEN + "enabled" + ChatColor.DARK_AQUA + " for: " + ChatColor.GOLD + i.getPluginName() + " v" + i.getPluginVersion() + "");
+        }
+        throwMessage(MsgType.INFO, ChatColor.RED + "Please also include a link to your configuration, as well as any log files which may be relavent." + ChatColor.RESET);
+        throwMessage(MsgType.INFO, ChatColor.RED + "Please ensure you reproduce the error with debug mode enabled to capture all details in logs first!" + ChatColor.RESET);
+        
+    }
+    
     // Formats a message and categorises it instead of using logger directly.
-    public  void throwMessage(String type, String message) {
+    public  void throwMessage(MsgType type, String message) {
 
         ConsoleCommandSender console = Bukkit.getServer().getConsoleSender();
-
-        if ("info".equals(type)) {
-            console.sendMessage(getFancyName() + ChatColor.DARK_AQUA + "[" + type.toUpperCase() + "]: " + message);
+        if (MsgType.INFO.equals(type)) {
+            console.sendMessage(getFancyName() + ChatColor.DARK_AQUA + "[" + type.name() + "]: " + message);
         } else {
-            if ("warning".equals(type)) {
-                console.sendMessage(getFancyName() + ChatColor.YELLOW + "[" + type.toUpperCase() + "]: " + message);
+            if (MsgType.WARNING.equals(type)) {
+                console.sendMessage(getFancyName() + ChatColor.YELLOW + "[" + type.name() + "]: " + message);
             } else {
-                if ("severe".equals(type)) {
-                    console.sendMessage(getFancyName() + ChatColor.RED + "[" + type.toUpperCase() + "]: " + message);
-                    plugin.disablePlugin();
+                if (MsgType.SEVERE.equals(type)) {
+                    console.sendMessage(getFancyName() + ChatColor.RED + "[" + type.name() + "]: " + message);
+                    printErrorReport(message);
                 } else {
-                    if ("new".equals(type)) {
-                        console.sendMessage(getFancyName() + ChatColor.LIGHT_PURPLE + "[" + type.toUpperCase() + "]: " + message);
+                    if (MsgType.NEW.equals(type)) {
+                        console.sendMessage(getFancyName() + ChatColor.LIGHT_PURPLE + "[" + type.name() + "]: " + message);
                     } else {
-                        this.throwMessage("severe",String.format(this.plugin.lang.getForKey("messages.errorThrowingMessage")));
+                        if (MsgType.SUCCESS.equals(type)) {
+                            console.sendMessage(getFancyName() + ChatColor.GREEN + "[" + type.name() + "]: " + message);
+                        } else {
+                            if (MsgType.DEBUG.equals(type) && plugin.config.debugMode) {
+                                console.sendMessage(getFancyName() + ChatColor.DARK_RED + "[" + type.name() + "]: " + message);
+                            } else {
+                                if (!MsgType.DEBUG.equals(type)) this.throwMessage(MsgType.SEVERE,String.format(this.plugin.lang.getForKey("messages.errorThrowingMessage")));
+                            }
+                        }
                     }
                 }
             }
@@ -166,19 +315,6 @@ public class RUtils extends RObject {
     public double distance(double sx, double sy, double sz, double dx, double dy, double dz) {
         double distance = Math.sqrt(Math.pow(sx-dx,2) + Math.pow(sx-dx,2) + Math.pow(sz-dz,2));
         return distance;
-    }
-    public Location isWarpCoreNearby(Chunk c) {
-        World world = c.getWorld();
-        for (Chunk ch : world.getLoadedChunks()) {
-            for (BlockState te : ch.getTileEntities()) {
-                if (te.getType().name().equals("WARPDRIVE_BLOCKSHIPCORE")) {
-                    if (distance(te.getLocation().getX(), 100.0, te.getLocation().getZ(),(c.getX()*16), 100.0,(c.getZ()*16)) < 182) {
-                        return te.getLocation();
-                    }
-                }
-            }
-        }
-        return null;
     }
     // Gets the count of online players in a chunk.
     public int onlinePlayersInChunk(Chunk chunk) {
@@ -238,15 +374,20 @@ public class RUtils extends RObject {
         RWorld RWorld = getRWorldForWorld(chunk.getWorld());
         
         // If the world is not loaded, do nothing.
-        if (RWorld == null) return false;
+        if (RWorld == null) {
+            plugin.utils.throwMessage(MsgType.DEBUG, "Denying player: " + player.getName() + " rights to regenerate as world: " + chunk.getWorld().getName() + " is not initialised in Regenrator. Report this to Devs!");
+            return false;
+        }
         
         // If the world has manual regen disabled, do not allow it.
         if (!RWorld.canManualRegen()) {
+            plugin.utils.throwMessage(MsgType.DEBUG, "Denying player: " + player.getName() + " rights to regenerate as world: " + chunk.getWorld().getName() + " has manual regen disabled.");
             return false;
         }
         
         // This returns true if the player has the override permission node but only for claimed land.
         if (player.hasPermission("regenerator.regen.override") && getIntegrationForChunk(chunk) != null) {
+            plugin.utils.throwMessage(MsgType.DEBUG, "Denying player: " + player.getName() + " rights to regenerate as they do not have regenerator.regen.override permission.");
             return true;
         }
 
@@ -255,12 +396,15 @@ public class RUtils extends RObject {
         if (getIntegrationForChunk(chunk) == null) {
             if (player.hasPermission("regenerator.regen.unclaimed")) {
                 return true;
+            } else {
+                plugin.utils.throwMessage(MsgType.DEBUG, "Denying player: " + player.getName() + " rights to regenerate as they do not have regenerator.regen.unclaimed permission.");
             }
         }
         
         // Blocked at the integration level.
         for (Integration integration : plugin.loadedIntegrations) {
             if (!integration.canPlayerRegen(player,chunk)) {
+                plugin.utils.throwMessage(MsgType.DEBUG, "Denying player: " + player.getName() + " rights to regenerate as integration with : " + integration.getPluginName() + " is demanding the " + integration.getPermissionRequiredToRegen(player, chunk) + " permission node, which they do not have.");
                 return false;
             }
         }
@@ -270,11 +414,11 @@ public class RUtils extends RObject {
     
     public void loadWorlds() {
         for (World world : Bukkit.getWorlds()) {
-            throwMessage("info", String.format(this.plugin.lang.getForKey("messages.loadingWorld"), world.getName()));
+            throwMessage(MsgType.INFO, String.format(this.plugin.lang.getForKey("messages.loadingWorld"), world.getName()));
             RWorld RWorld = new RWorld(plugin, world);
             RChunk RChunk = new RChunk(plugin, world.getSpawnLocation().getBlockX(), world.getSpawnLocation().getBlockX(), world.getName());
             plugin.loadedWorlds.add(RWorld);
-            throwMessage("info", String.format(this.plugin.lang.getForKey("messages.loadedWorld"), world.getName()));
+            throwMessage(MsgType.INFO, String.format(this.plugin.lang.getForKey("messages.loadedWorld"), world.getName()));
         }
     }
     public void initAvailableIntegrations() {
@@ -283,11 +427,6 @@ public class RUtils extends RObject {
         GriefPrevention.add("16");
         GriefPrevention.add("GriefPreventionIntegration");
         plugin.availableIntergrations.add(GriefPrevention);
-        List<String> WorldGuard = new ArrayList<String>();
-        WorldGuard.add("WorldGuard");
-        WorldGuard.add("7");
-        WorldGuard.add("WorldGuardIntegration");
-        plugin.availableIntergrations.add(WorldGuard);
     }
     
     public boolean isLagOK() {
@@ -306,7 +445,7 @@ public class RUtils extends RObject {
             e.remove();
             count++;
         }   
-        throwMessage("info", "Removed " + count + " entities from chunk!");
+        throwMessage(MsgType.DEBUG, String.format(plugin.lang.getForKey("messages.entitiesRemovedCount"), count,rChunk.chunkX, rChunk.chunkZ, rChunk.getWorldName()));
     }
     
     public boolean validateChunkInactivity (RChunk rChunk) {
@@ -318,7 +457,7 @@ public class RUtils extends RObject {
         // IF the chunk doesnt exist, do nothing.
         if (rChunk == null) return false;
         
-        if (rChunk.lastActivity != 0) {
+        if (rChunk.lastActivity != 0 && rChunk.lastActivity != -1) {
             secSinceLastActive = (System.currentTimeMillis() - rChunk.lastActivity) / 1000;
         }
         
@@ -348,22 +487,26 @@ public class RUtils extends RObject {
                     if (Integration.class.isAssignableFrom(integrationClass)) {
                         Integration integration = (Integration) integrationClass.newInstance();
                         integration.plugin = module[0];
-                        integration.RegeneratorPlugin = plugin;
+                        integration.RegeneratorPlugin = plugin;                        
+                        throwMessage(MsgType.INFO, "[" + module[2] + "] " + String.format(plugin.lang.getForKey("messages.detectedAndLoadingIntegration"), integration.getPluginName(), integration.getPluginVersion(), module[2]));
                         integration.validateConfig();
                         plugin.loadedIntegrations.add(integration);
-
-                        throwMessage("info", "[" + module[2] + "] " + String.format(plugin.lang.getForKey("messages.detectedAndLoadingIntegration"), integration.getPluginName(), integration.getPluginVersion(), module[2]));
+                        if (!integration.supportsUnknownProtectionDetection() && plugin.config.enableUnknownProtectionDetection) {
+                            throwMessage(MsgType.WARNING, String.format(plugin.lang.getForKey("messages.integrationConflictFound"), integration.getPluginName()));
+                            plugin.config.enableUnknownProtectionDetection = false;
+                            plugin.config.saveData();
+                        }
                     }
                 } else {
-                    throwMessage("warning", "[" + module[2] + "] " + String.format(plugin.lang.getForKey("messages.detectedInvalidVersionForIntegration"), module[0], Bukkit.getPluginManager().getPlugin(module[0]).getDescription().getVersion(), module[1]));
-                    throwMessage("warning", String.format(plugin.lang.getForKey("messages.disableIntegration"), module[2]));
+                    throwMessage(MsgType.WARNING, "[" + module[2] + "] " + String.format(plugin.lang.getForKey("messages.detectedInvalidVersionForIntegration"), module[0], Bukkit.getPluginManager().getPlugin(module[0]).getDescription().getVersion(), module[1]));
+                    throwMessage(MsgType.WARNING, String.format(plugin.lang.getForKey("messages.disableIntegration"), module[2]));
                 }
             }
         } catch (ClassNotFoundException ex) {
-            throwMessage("severe", String.format(plugin.lang.getForKey("messages.integrationUnsupported"), plugin));
+            throwMessage(MsgType.SEVERE, String.format(plugin.lang.getForKey("messages.integrationUnsupported"), plugin));
         } catch (InstantiationException | IllegalAccessException ex) {
-            throwMessage("severe", String.format(plugin.lang.getForKey("messages.integrationUnsupportedShouldBe"), plugin));
-            ex.printStackTrace();
+            throwMessage(MsgType.SEVERE, String.format(plugin.lang.getForKey("messages.integrationUnsupportedShouldBe"), plugin));
+            if (plugin.config.debugMode) ex.printStackTrace();
         }
         
     }

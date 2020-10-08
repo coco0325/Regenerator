@@ -5,6 +5,7 @@
  */
 package com.draksterau.Regenerator.config;
 
+import com.draksterau.Regenerator.Handlers.MsgType;
 import com.draksterau.Regenerator.RegeneratorPlugin;
 import com.draksterau.Regenerator.integration.Integration;
 import java.io.File;
@@ -56,7 +57,7 @@ public final class integrationConfigHandler {
             try {
                 configureIntegration();
             } catch (UnsupportedEncodingException ex) {
-                plugin.utils.throwMessage("severe", "Failed to set default " + integration.getPluginName() + " Integration config with exception: " + ex.getMessage());
+                plugin.utils.throwMessage(MsgType.SEVERE, "Failed to set default " + integration.getPluginName() + " Integration config with exception: " + ex.getMessage());
             }
         }
     }
@@ -68,7 +69,7 @@ public final class integrationConfigHandler {
         try {
             integrationConfig.save(integrationConfigFile);
         } catch (IOException ex) {
-            plugin.utils.throwMessage("severe", "Failed to save  " + integration.getPluginName() + " Integration Config with exception: " + ex.getMessage());
+            plugin.utils.throwMessage(MsgType.SEVERE, "Failed to save  " + integration.getPluginName() + " Integration Config with exception: " + ex.getMessage());
         }
         integrationConfig = null;
         integrationConfigFile = null;

@@ -3,18 +3,17 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package com.draksterau.Regenerator.event;
+package com.draksterau.Regenerator.Handlers;
 
 /**
  *
  * @author draks
  */
-public enum RequestTrigger {
-    Break,
-    Place,
-    Explosion,
-    Command,
-    ChunkLoad,
-    PlayerMovement,
-    Unknown;
+public enum MsgType {
+    INFO,
+    SUCCESS,
+    WARNING,
+    SEVERE,
+    DEBUG,
+    NEW;    
 }
