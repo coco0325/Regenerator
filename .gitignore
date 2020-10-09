@@ -4,7 +4,6 @@
 /sonar/
 /.settings/
 /.idea/
-
 dependency-reduced-pom.xml
 
 .classpath

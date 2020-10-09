@@ -15,12 +15,13 @@ import java.util.logging.Logger;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.generator.BlockPopulator;
+import org.bukkit.scheduler.BukkitRunnable;
 
 /**
  *
  * @author draks
  */
-public class ChunkTask implements Runnable {
+public class ChunkTask extends BukkitRunnable {
     
     private boolean wasUnloaded;
     RChunk RChunk;
